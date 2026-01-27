@@ -8,17 +8,88 @@ import StoreKit
 import Network
 import AVFoundation
 
+/// A hybrid web-native view controller that bridges WebKit and StoreKit functionality.
+///
+/// `SKAppController` provides a foundation for building hybrid iOS applications that combine
+/// web content with native iOS features. It manages a full-screen `WKWebView` and exposes
+/// a JavaScript bridge via `WKScriptMessageHandler` to enable bidirectional communication
+/// between web content and native code.
+///
+/// ## Architecture
+///
+/// The controller follows a hybrid web-native pattern:
+/// - Web content is loaded in a `WKWebView` and drives the UI
+/// - Native capabilities (StoreKit, sharing, etc.) are exposed via message handlers
+/// - Events are dispatched back to JavaScript via custom DOM events on `#skhub`
+///
+/// ## JavaScript Bridge
+///
+/// Web content can invoke native functionality by posting messages to `SKMessageHandler`:
+/// ```javascript
+/// webkit.messageHandlers.SKMessageHandler.postMessage({
+///     action: 'purchasetapped',
+///     uuid: 'user-uuid-string'
+/// });
+/// ```
+///
+/// Supported actions:
+/// - `showshare`: Present the system share sheet
+/// - `showrate`: Open App Store review page
+/// - `restorepurchases`: Restore previous purchases
+/// - `purchasetapped`: Initiate a purchase flow
+/// - `showactivity` / `hideactivity`: Control loading indicator
+/// - `getpid`: Load a specific product ID
+/// - `userready`: Request language and version info
+///
+/// - SeeAlso: ``AppController`` for app-specific customization
+/// - SeeAlso: ``SKAppDelegate`` for application lifecycle management
 open class SKAppController: UIViewController, WKNavigationDelegate, WKScriptMessageHandler, WKUIDelegate, UIScrollViewDelegate {
 
+    /// The available StoreKit products fetched from App Store Connect.
+    ///
+    /// Populated asynchronously after calling ``loadSubscriptionOptions()``.
+    /// Empty until products are successfully loaded.
     open var products = [Product]()
+
+    /// The unique user identifier used for App Account Token during purchases.
+    ///
+    /// This UUID links purchases to a specific user account in your backend.
+    /// Set via the `uuid` parameter in the `purchasetapped` message action.
     open var uuidString = ""
+
+    /// The most recently loaded URL in the web view.
+    ///
+    /// Updated each time ``loadURL(urlString:)`` is called. Useful for tracking
+    /// navigation state or reloading the current page.
     open var lastURL = ""
+
+    /// The product identifier for the subscription being offered.
+    ///
+    /// Defaults to ``AppConstants/SUBSCRIPTION_URL``. Can be dynamically updated
+    /// via the `getpid` message action from JavaScript.
     open var productID = AppConstants.SUBSCRIPTION_URL
+
+    /// Background task listening for StoreKit transaction updates.
     var updates: Task<Void, Never>? = nil
+
+    /// The web view displaying the hybrid application content.
+    ///
+    /// Configured with inline media playback enabled and a message handler
+    /// registered for `SKMessageHandler`. Back/forward navigation gestures
+    /// are disabled.
     open var webView = WKWebView()
+
+    /// The overlay view containing the activity indicator.
     var activityView = UIView()
+
+    /// Tracks whether the activity indicator is currently visible.
     var isActivityShowing = false
 
+    /// Creates a new app controller with a configured web view and StoreKit listener.
+    ///
+    /// Initializes the web view with inline media playback support, registers the
+    /// JavaScript message handler, and starts listening for StoreKit transaction updates.
+    /// If a product ID is configured, subscription options are loaded asynchronously.
     public required init() {
         super.init(nibName: nil, bundle: nil)
 
@@ -72,7 +143,7 @@ open class SKAppController: UIViewController, WKNavigationDelegate, WKScriptMess
         self.webView.topAnchor.constraint(equalTo: self.view.topAnchor, constant: 0).isActive = true
         self.webView.bottomAnchor.constraint(equalTo: self.view.bottomAnchor, constant: 0).isActive = true
 
-        self.loadURL(urlString: AppConstants.BASE_URL)
+        self.loadURL(urlString: AppConstants.APP_URL)
 
         activityView = UIView(frame: CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height))
         activityView.backgroundColor = .clear
@@ -106,6 +177,14 @@ open class SKAppController: UIViewController, WKNavigationDelegate, WKScriptMess
         return UIDevice.current.userInterfaceIdiom == .pad
     }
 
+    /// Displays a centered loading indicator overlay on the web view.
+    ///
+    /// The activity indicator appears as a semi-transparent black rounded square
+    /// with a spinning indicator. Automatically hides after 15 seconds as a safety timeout.
+    /// Dispatches an `ActivityShown` event to JavaScript.
+    ///
+    /// - Note: Calling this method when the indicator is already showing has no effect.
+    /// - SeeAlso: ``hideActivity()``
     public func showActivity() {
         if isActivityShowing {
             return
@@ -123,6 +202,11 @@ open class SKAppController: UIViewController, WKNavigationDelegate, WKScriptMess
         self.appEvent(eventString: "ActivityShown")
     }
 
+    /// Removes the loading indicator overlay from the web view.
+    ///
+    /// Dispatches an `ActivityHidden` event to JavaScript.
+    ///
+    /// - SeeAlso: ``showActivity()``
     public func hideActivity() {
         DispatchQueue.main.async {
             self.activityView.removeFromSuperview()
@@ -161,6 +245,13 @@ open class SKAppController: UIViewController, WKNavigationDelegate, WKScriptMess
         scrollView.pinchGestureRecognizer?.isEnabled = false
     }
 
+    /// Loads web content from the specified URL.
+    ///
+    /// The request includes a custom `SK-Browser` header for server-side detection
+    /// and disables caching to ensure fresh content.
+    ///
+    /// - Parameter urlString: The URL string to load. Must be a valid URL.
+    /// - Note: Updates ``lastURL`` before loading.
     @objc open func loadURL(urlString: String) {
         self.lastURL = urlString
 
@@ -175,6 +266,27 @@ open class SKAppController: UIViewController, WKNavigationDelegate, WKScriptMess
 
     // MARK: - JS Message Handler
 
+    /// Handles incoming messages from JavaScript via the `SKMessageHandler` bridge.
+    ///
+    /// The message body should be a dictionary with an `action` key specifying the
+    /// operation to perform. Additional parameters depend on the action type.
+    ///
+    /// ## Supported Actions
+    ///
+    /// | Action | Parameters | Description |
+    /// |--------|------------|-------------|
+    /// | `showshare` | `appid` | Present share sheet with App Store link |
+    /// | `showrate` | `appid` | Open App Store review page |
+    /// | `restorepurchases` | — | Restore previous purchases via StoreKit |
+    /// | `purchasetapped` | `uuid` | Initiate purchase with user account token |
+    /// | `showactivity` | — | Show loading indicator |
+    /// | `hideactivity` | — | Hide loading indicator |
+    /// | `getpid` | `subscriptionURL` | Load a specific product ID |
+    /// | `userready` | — | Request language and version info |
+    ///
+    /// - Parameters:
+    ///   - userContentController: The content controller that received the message.
+    ///   - message: The script message containing the action dictionary.
     public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         var action = "none"
         let dic = message.body as? [String: String]
@@ -266,6 +378,20 @@ open class SKAppController: UIViewController, WKNavigationDelegate, WKScriptMess
         return
     }
 
+    /// Dispatches a custom event to the JavaScript layer.
+    ///
+    /// Fires an `app-event` CustomEvent on the `#skhub` element with the specified
+    /// event title. The web application can listen for these events to react to
+    /// native state changes.
+    ///
+    /// ```javascript
+    /// document.querySelector('#skhub').addEventListener('app-event', (e) => {
+    ///     console.log(e.detail.title); // e.g., "PurchaseComplete"
+    /// });
+    /// ```
+    ///
+    /// - Parameter eventString: The event title to include in the detail payload.
+    /// - SeeAlso: ``appEventWithDetails(eventString:jsonDetails:)``
     public func appEvent(eventString: String) {
         DispatchQueue.main.async {
             let script = "document.querySelector('#skhub').dispatchEvent( new CustomEvent('app-event', {'detail':  {'title': '\(eventString)'}}));"
@@ -273,6 +399,15 @@ open class SKAppController: UIViewController, WKNavigationDelegate, WKScriptMess
         }
     }
 
+    /// Dispatches a custom event with additional JSON payload to the JavaScript layer.
+    ///
+    /// Similar to ``appEvent(eventString:)`` but includes additional key-value pairs
+    /// in the event detail object.
+    ///
+    /// - Parameters:
+    ///   - eventString: The event title to include in the detail payload.
+    ///   - jsonDetails: Additional JSON key-value pairs to merge into the detail object.
+    ///                  Should be formatted as `'key':'value'` without outer braces.
     public func appEventWithDetails(eventString: String, jsonDetails: String) {
         DispatchQueue.main.async {
             let script = "document.querySelector('#skhub').dispatchEvent( new CustomEvent('app-event', {'detail':  {'title': '\(eventString)', \(jsonDetails)}}));"
@@ -280,11 +415,17 @@ open class SKAppController: UIViewController, WKNavigationDelegate, WKScriptMess
         }
     }
 
+    /// Returns the current device locale identifier.
+    ///
+    /// - Returns: The locale identifier string (e.g., `"en_US"`, `"fr_FR"`).
     open func getLang() -> String {
         let locale = NSLocale.current.identifier
         return locale
     }
 
+    /// Returns the app's short version string from the bundle.
+    ///
+    /// - Returns: The `CFBundleShortVersionString` value (e.g., `"1.0.0"`), or `"0.0"` if unavailable.
     open func getVersion() -> String {
         var versionString = "0.0"
         if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
@@ -293,6 +434,13 @@ open class SKAppController: UIViewController, WKNavigationDelegate, WKScriptMess
         return versionString
     }
 
+    /// Dispatches both version and language information to JavaScript.
+    ///
+    /// Fires two separate `app-event` events:
+    /// - `GetVersion` with the app version
+    /// - `GetLang` with the device locale
+    ///
+    /// - SeeAlso: ``getLang()``, ``getVersion()``
     open func getLangVersion() {
         let myVersion = getVersion()
         let myLang = getLang()
@@ -302,6 +450,12 @@ open class SKAppController: UIViewController, WKNavigationDelegate, WKScriptMess
 
     // MARK: - StoreKit
 
+    /// Fetches available products from App Store Connect.
+    ///
+    /// Loads the product specified by ``productID`` and populates the ``products`` array.
+    /// Dispatches either `ProductsLoaded` or `ProductsLoadError` to JavaScript upon completion.
+    ///
+    /// - Note: Called automatically during initialization if a product ID is configured.
     public func loadSubscriptionOptions() async {
         do {
             let appProducts = try await Product.products(for: [productID])
@@ -312,6 +466,24 @@ open class SKAppController: UIViewController, WKNavigationDelegate, WKScriptMess
         }
     }
 
+    /// Initiates the purchase flow for the first available product.
+    ///
+    /// Requires ``uuidString`` to be set before calling. The UUID is passed as an
+    /// App Account Token to link the transaction to a specific user account.
+    ///
+    /// ## Events Dispatched
+    ///
+    /// - `PurchaseTappedNoUUID`: Called if ``uuidString`` is empty
+    /// - `PurchaseTappedGetProduct`: Purchase initiated
+    /// - `PurchaseComplete`: Transaction verified and finished
+    /// - `PurchaseFailed`: Transaction verification failed
+    /// - `PurchaseSheetClosed`: User cancelled the purchase
+    /// - `PurchasePending`: Purchase requires additional action
+    /// - `PurchaseErrorUnknown`: An error occurred during purchase
+    /// - `PurchaseNoProductsAvailable`: No products loaded in ``products``
+    ///
+    /// - Warning: Ensure ``uuidString`` is set before invoking this method.
+    /// - SeeAlso: ``loadSubscriptionOptions()``
     public func purchaseTapped() {
         if uuidString == "" {
             appEvent(eventString: "PurchaseTappedNoUUID")
@@ -374,10 +546,21 @@ open class SKAppController: UIViewController, WKNavigationDelegate, WKScriptMess
         }
     }
 
+    /// Restores previously purchased transactions from the App Store.
+    ///
+    /// Calls `AppStore.sync()` to refresh the user's transaction history.
+    ///
+    /// - Returns: `true` if sync succeeded, `false` otherwise.
     func restore() async -> Bool {
         return ((try? await AppStore.sync()) != nil)
     }
 
+    /// Creates a background task that listens for StoreKit transaction updates.
+    ///
+    /// Monitors `Transaction.updates` for incoming transactions and finishes them.
+    /// Handles revocations, expirations, and upgrades by returning early.
+    ///
+    /// - Returns: A long-running task that processes transaction updates.
     private func updatesListenerTask() -> Task<Void, Never> {
         Task(priority: .background) {
             for await verificationResult in Transaction.updates {

@@ -38,8 +38,8 @@ Edit `AppConstants.swift`:
 ```swift
 struct AppConstants {
     static let APP_STORE_ID = "123456789"
-    static let SUBSCRIPTION_URL = "com.yourcompany.app.monthly"
-    static let BASE_URL = "https://your-webapp.com"
+    static let SUBSCRIPTION_URL = "com.yourcompany.app.subscription"
+    static let APP_URL = "https://your-webapp.com"
 }
 ```
 
