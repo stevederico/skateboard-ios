@@ -1,3 +1,9 @@
+0.0.3
+
+  Add UIScene lifecycle
+  Add SceneDelegate
+  Update SKAppDelegate
+
 0.0.2
 
   Add DocC documentation

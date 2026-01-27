@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		726D24A82F2978CD00A0F019 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 726D24A72F2978CD00A0F019 /* SceneDelegate.swift */; };
 		A1000001 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001 /* AppDelegate.swift */; };
 		A1000002 /* AppController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000002 /* AppController.swift */; };
 		A1000003 /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000003 /* AppConstants.swift */; };
@@ -17,6 +18,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		726D24A72F2978CD00A0F019 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		A2000001 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		A2000002 /* AppController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppController.swift; sourceTree = "<group>"; };
 		A2000003 /* AppConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConstants.swift; sourceTree = "<group>"; };
@@ -54,6 +56,7 @@
 			children = (
 				A2000001 /* AppDelegate.swift */,
 				A2000002 /* AppController.swift */,
+				726D24A72F2978CD00A0F019 /* SceneDelegate.swift */,
 				A2000003 /* AppConstants.swift */,
 				A5000003 /* Library */,
 				A2000006 /* Assets.xcassets */,
@@ -108,7 +111,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1500;
-				LastUpgradeCheck = 1500;
+				LastUpgradeCheck = 2620;
 				TargetAttributes = {
 					A6000001 = {
 						CreatedOnToolsVersion = 15.0;
@@ -155,6 +158,7 @@
 				A1000003 /* AppConstants.swift in Sources */,
 				A1000004 /* SKAppDelegate.swift in Sources */,
 				A1000005 /* SKAppController.swift in Sources */,
+				726D24A82F2978CD00A0F019 /* SceneDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -219,6 +223,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -275,6 +280,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};

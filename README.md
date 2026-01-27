@@ -1,10 +1,23 @@
-# skateboard-ios
+<div align="center">
+  <a href="#">
+    <img alt="Skateboard - Ship your React app in minutes" width="40%" src="https://github.com/user-attachments/assets/b7f2b098-503b-4439-8454-7eb45ae82307">
+  </a>
+</div>
 
-![iOS](https://img.shields.io/badge/iOS-15+-000000?style=flat&logo=apple)
-![Swift](https://img.shields.io/badge/Swift-5.9-FA7343?style=flat&logo=swift&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-blue?style=flat)
+<p align="center" style="margin-top: 40px; margin-bottom: 5px;">
+  <img src="https://raw.githubusercontent.com/stevederico/skateboard/master/public/icons/icon.png" width="60" height="60" alt="Skateboard Logo">
+</p>
+<h1 align="center" style="border-bottom: none; margin-bottom: 0;">skateboard-ios</h1>
 
-**Native iOS shell for skateboard web apps. 3 lines of config. Ship to the App Store.**
+<p align="center">
+  <img src="https://img.shields.io/badge/iOS-15+-000000?style=flat&logo=apple" alt="iOS">
+  <img src="https://img.shields.io/badge/Swift-5.9-FA7343?style=flat&logo=swift&logoColor=white" alt="Swift">
+  <img src="https://img.shields.io/badge/License-MIT-blue?style=flat" alt="License">
+</p>
+
+<h3 align="center" style="margin-top: 0; font-weight: normal;">
+  Native iOS shell for skateboard web apps. 3 lines of config. Ship to the App Store.
+</h3>
 
 Turn any skateboard web app into a native iOS app with StoreKit payments, native share sheets, and a JS-to-native bridge—without touching UIKit.
 

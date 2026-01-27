@@ -37,5 +37,5 @@ struct AppConstants {
     ///
     /// Loaded on app launch and when returning from background.
     /// Should point to the entry point of your web application.
-    static let APP_URL = "https://your-webapp.com"
+    static let APP_URL = "https://github.com/stevederico"
 }
