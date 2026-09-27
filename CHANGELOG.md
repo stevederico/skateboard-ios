@@ -1,3 +1,12 @@
+0.1.0
+
+  Add push notifications
+  Add universal links
+  Add askPush action
+  Add openPath action
+  Fix launch white flash
+  Keep page on return
+
 0.0.4
 
   Restyle README layout

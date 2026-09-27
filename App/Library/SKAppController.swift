@@ -5,6 +5,7 @@
 import UIKit
 @preconcurrency import WebKit
 import StoreKit
+import UserNotifications
 import Network
 import AVFoundation
 
@@ -72,6 +73,9 @@ open class SKAppController: UIViewController, WKNavigationDelegate, WKScriptMess
     /// Background task listening for StoreKit transaction updates.
     var updates: Task<Void, Never>? = nil
 
+    /// When the current page was last loaded, for ``refreshIfStale(after:)``.
+    open var lastLoadDate: Date? = nil
+
     /// The web view displaying the hybrid application content.
     ///
     /// Configured with inline media playback enabled and a message handler
@@ -101,6 +105,14 @@ open class SKAppController: UIViewController, WKNavigationDelegate, WKScriptMess
         webView = WKWebView(frame: CGRect.zero, configuration: configuration)
         webView.allowsBackForwardNavigationGestures = false
         webView.uiDelegate = self
+        // Transparent until the page paints, so the system background (dark in
+        // dark mode) shows instead of a white flash at launch.
+        webView.isOpaque = false
+        webView.backgroundColor = .clear
+        webView.scrollView.backgroundColor = .clear
+
+        NotificationCenter.default.addObserver(self, selector: #selector(pushTokenReceived(_:)), name: .skPushToken, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(openURLRequested(_:)), name: .skOpenURL, object: nil)
 
         let appearance = UINavigationBarAppearance()
         appearance.configureWithOpaqueBackground()
@@ -127,6 +139,8 @@ open class SKAppController: UIViewController, WKNavigationDelegate, WKScriptMess
 
     open override func viewDidLoad() {
         super.viewDidLoad()
+
+        self.view.backgroundColor = .systemBackground
 
         self.webView.scrollView.contentInsetAdjustmentBehavior = .never
         self.webView.navigationDelegate = self
@@ -170,7 +184,8 @@ open class SKAppController: UIViewController, WKNavigationDelegate, WKScriptMess
     }
 
     override open var preferredStatusBarStyle: UIStatusBarStyle {
-        return .darkContent
+        // Follow the system appearance: light text in dark mode.
+        return .default
     }
 
     open override var prefersStatusBarHidden: Bool {
@@ -254,6 +269,7 @@ open class SKAppController: UIViewController, WKNavigationDelegate, WKScriptMess
     /// - Note: Updates ``lastURL`` before loading.
     @objc open func loadURL(urlString: String) {
         self.lastURL = urlString
+        self.lastLoadDate = Date()
 
         DispatchQueue.main.async {
             let url = URL(string: urlString)!
@@ -261,6 +277,71 @@ open class SKAppController: UIViewController, WKNavigationDelegate, WKScriptMess
             request.setValue("SK-Browser", forHTTPHeaderField: "SK-Browser")
             request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
             self.webView.load(request)
+        }
+    }
+
+    /// Reload the start page only when it was loaded more than `seconds` ago,
+    /// so switching apps keeps the person where they were.
+    open func refreshIfStale(after seconds: TimeInterval) {
+        guard let last = lastLoadDate else {
+            loadURL(urlString: AppConstants.APP_URL)
+            return
+        }
+        if Date().timeIntervalSince(last) > seconds {
+            loadURL(urlString: AppConstants.APP_URL)
+        }
+    }
+
+    /// Open a path ("/app/list") or a full URL on the app's own host in the
+    /// web view. Anything else is ignored.
+    open func open(path: String) {
+        guard let base = URL(string: AppConstants.APP_URL), let host = base.host else { return }
+        if path.hasPrefix("/") {
+            var parts = URLComponents()
+            parts.scheme = base.scheme
+            parts.host = host
+            parts.port = base.port
+            let pieces = path.split(separator: "?", maxSplits: 1).map(String.init)
+            parts.path = pieces[0]
+            parts.percentEncodedQuery = pieces.count > 1 ? pieces[1] : nil
+            if let url = parts.url { loadURL(urlString: url.absoluteString) }
+        } else if let url = URL(string: path), url.host == host, url.scheme == "https" {
+            loadURL(urlString: url.absoluteString)
+        }
+    }
+
+    // MARK: - Push notifications
+
+    /// Ask for notification permission, then register with APNs. The web app
+    /// sends `askpush` at a good moment (not at launch).
+    open func requestPush() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+            self.appEventWithDetails(eventString: "PushPermission", jsonDetails: "'granted':'\(granted ? "yes" : "no")'")
+            guard granted else { return }
+            DispatchQueue.main.async {
+                UIApplication.shared.registerForRemoteNotifications()
+            }
+        }
+    }
+
+    /// Hand the APNs token (hex) to the web app as a `PushRegistered` event.
+    open func sendPushToken(_ token: String) {
+        appEventWithDetails(eventString: "PushRegistered", jsonDetails: "'token':'\(token)'")
+    }
+
+    @objc func pushTokenReceived(_ note: Notification) {
+        if let token = note.object as? String { sendPushToken(token) }
+    }
+
+    @objc func openURLRequested(_ note: Notification) {
+        if let path = note.object as? String { open(path: path) }
+    }
+
+    /// Once a page finishes loading, resend a saved push token so the web app
+    /// can store it for whoever is signed in.
+    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if let token = UserDefaults.standard.string(forKey: SKPushTokenKey) {
+            sendPushToken(token)
         }
     }
 
@@ -294,6 +375,16 @@ open class SKAppController: UIViewController, WKNavigationDelegate, WKScriptMess
             if action.count > 0 {
                 action = actionUnwrapped
             }
+        }
+
+        if action.lowercased() == "askpush" {
+            requestPush()
+            return
+        }
+
+        if action.lowercased() == "openpath", let path = dic?["path"] {
+            open(path: path)
+            return
         }
 
         if action.lowercased() == "showshare" {

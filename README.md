@@ -164,6 +164,8 @@ window.webkit.messageHandlers.SKMessageHandler.postMessage({
 | `showActivity` | — | Shows native loading spinner |
 | `hideActivity` | — | Hides loading spinner |
 | `userReady` | — | Triggers version/language sync |
+| `askPush` | — | Asks for notification permission, then registers for push |
+| `openPath` | `path` | Opens a path (`/app/list`) or a same-host URL |
 
 ### Receiving Events
 
@@ -187,6 +189,26 @@ document.querySelector('#skhub').addEventListener('app-event', (e) => {
 | `PurchasePending` | — | Purchase awaiting approval |
 | `GetVersion` | `version` | App version string |
 | `GetLang` | `language` | Device locale |
+| `PushPermission` | `granted` | After `askPush` resolves |
+| `PushRegistered` | `token` | APNs device token (hex); resent after each page load |
+
+## Push Notifications
+
+1. Add the Push Notifications capability (`aps-environment` entitlement)
+2. From your web app, send `askPush` at a good moment, not at launch
+3. Save the `token` from `PushRegistered` on your server
+4. Send pushes with an optional `url` key in the payload; a tap opens that page
+
+```json
+{ "aps": { "alert": { "title": "Back in Stock", "body": "Size 10 is live" } }, "url": "/app/item/42" }
+```
+
+## Universal Links
+
+Add `applinks:your.host` under Associated Domains and serve
+`/.well-known/apple-app-site-association` from that host. Links that open the
+app load the same path in the web view. Coming back to the app keeps the
+current page; it reloads the start URL only after 30 minutes away.
 
 ## Detecting Native Context
 
