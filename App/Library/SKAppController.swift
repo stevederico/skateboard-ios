@@ -234,22 +234,44 @@ open class SKAppController: UIViewController, WKNavigationDelegate, WKScriptMess
     // MARK: - WKWebView
 
     public func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        if navigationAction.targetFrame == nil {
-            self.webView.load(navigationAction.request)
+        if navigationAction.targetFrame == nil, let url = navigationAction.request.url {
+            if isAppHost(url) {
+                self.webView.load(navigationAction.request)
+            } else {
+                UIApplication.shared.open(url, options: [:], completionHandler: nil)
+            }
         }
         return nil
     }
 
+    /// Whether a URL is on the same host as `AppConstants.APP_URL`.
+    open func isAppHost(_ url: URL) -> Bool {
+        guard let appHost = URL(string: AppConstants.APP_URL)?.host?.lowercased() else { return true }
+        return url.host?.lowercased() == appHost
+    }
+
     public func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        if let url = navigationAction.request.url,
-           !url.absoluteString.hasPrefix("http://"),
-           !url.absoluteString.hasPrefix("https://"),
-           UIApplication.shared.canOpenURL(url) {
+        guard let url = navigationAction.request.url else {
+            decisionHandler(.allow)
+            return
+        }
+        let scheme = url.scheme?.lowercased() ?? ""
+        // mailto:, tel:, itms-apps: and other app links go to the system.
+        if !["http", "https", "about", "data", "blob"].contains(scheme) {
             UIApplication.shared.open(url, options: [:], completionHandler: nil)
             decisionHandler(.cancel)
-        } else {
-            decisionHandler(.allow)
+            return
         }
+        // A tapped link to another site opens in Safari, so the app stays on its own pages.
+        if navigationAction.navigationType == .linkActivated,
+           navigationAction.targetFrame?.isMainFrame ?? true,
+           (scheme == "http" || scheme == "https"),
+           !isAppHost(url) {
+            UIApplication.shared.open(url, options: [:], completionHandler: nil)
+            decisionHandler(.cancel)
+            return
+        }
+        decisionHandler(.allow)
     }
 
     public func viewForZooming(in: UIScrollView) -> UIView? {

@@ -203,6 +203,13 @@ document.querySelector('#skhub').addEventListener('app-event', (e) => {
 { "aps": { "alert": { "title": "Back in Stock", "body": "Size 10 is live" } }, "url": "/app/item/42" }
 ```
 
+## Links
+
+Tapped links to another host, and `target="_blank"` links off the app's host,
+open in Safari. `mailto:`, `tel:` and App Store links open in their apps. Links
+on the app's own host stay in the web view. Override `isAppHost(_:)` to allow
+more hosts.
+
 ## Universal Links
 
 Add `applinks:your.host` under Associated Domains and serve

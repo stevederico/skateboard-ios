@@ -1,3 +1,8 @@
+0.2.0
+
+  Open outside links externally
+  Add isAppHost helper
+
 0.1.0
 
   Add push notifications
